@@ -1,67 +1,70 @@
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <math.h>
+#include <stdlib.h>    //standard(标准) library
+#include <stdio.h>     //standard input/output(标准输入/输出)
+#include <string.h>    
+#include <math.h>    
 
-#include <libavutil/avassert.h>
-#include <libavutil/channel_layout.h>
-#include <libavutil/opt.h>
-#include <libavutil/mathematics.h>
-#include <libavutil/timestamp.h>
-#include <libavcodec/avcodec.h>
-#include <libavformat/avformat.h>
-#include <libswscale/swscale.h>
-#include <libswresample/swresample.h>
+#include <libavutil/avassert.h>   //utility(实用),assert(断言)
+#include <libavutil/channel_layout.h>  //channel(通道),layout(布局)
+#include <libavutil/opt.h>   //option(选项)
+#include <libavutil/mathematics.h>  //mathematics(数学)
+#include <libavutil/timestamp.h>   //timestamp(时间戳)
+#include <libavcodec/avcodec.h>    //
+#include <libavformat/avformat.h>   //
+#include <libswscale/swscale.h>    //scale(缩放),swscale(软件缩放),sw:software(软件)
+#include <libswresample/swresample.h>   //resample(重采样),swresample(软件重采样)
 
-#define STREAM_DURATION   10.0
-#define STREAM_FRAME_RATE 25 /* 25 images/s */
-#define STREAM_PIX_FMT    AV_PIX_FMT_YUV420P /* default pix_fmt */
+#define STREAM_DURATION   10.0   //fefine(定义), duration(持续时间)
+#define STREAM_FRAME_RATE 25 /* 25 images/s */   //frame(帧),rate(速率)
+#define STREAM_PIX_FMT    AV_PIX_FMT_YUV420P /* default pix_fmt */   
+//pixel(像素),format(格式),YUV420P是YUV格式的一种，Y表示亮度，U表示蓝色色度，V表示红色色度
 
-#define SCALE_FLAGS SWS_BICUBIC
+
+#define SCALE_FLAGS SWS_BICUBIC   //scale(缩放),flag(标志),SWS_BICUBIC是双三次插值算法
 
 // 对单个输出AVStream的封装的结构体
-typedef struct OutputStream {
-    AVStream *st;
-    AVCodecContext *enc;
+typedef struct OutputStream {    //define(定义),structure(结构)
+    AVStream *st;            
+	AVCodecContext* enc;     //encode(编码)
 
-    // 下一帧将生成的时间戳（Presentation Timestamp）
-    int64_t next_pts;
-    int samples_count;
-
+	// 下一帧将生成的时间戳（Presentation Timestamp）   //presentation(展示)
+    int64_t next_pts;        //
+	int samples_count;      //sample(样本),count(计数)
+       
     // 存储编码前的原始帧
-    AVFrame *frame;
+    AVFrame *frame;      
     // 存储临时帧
-    AVFrame *tmp_frame;
+	AVFrame* tmp_frame;   //temporary(临时)
 
     // 存储临时数据包
-    AVPacket *tmp_pkt;
+    AVPacket *tmp_pkt;   //
 
     // 时间相关的变量，用于计算帧的时间戳
-    float t, tincr, tincr2;
+    float t, tincr, tincr2;    //float(浮点)
 
     // 用于图像转换
-    struct SwsContext *sws_ctx;
+    struct SwsContext *sws_ctx;   //software(软件)，scale(缩放)
     // 用于音频转换
-    struct SwrContext *swr_ctx;
+    struct SwrContext *swr_ctx;   //software(软件)，resample(重采样)
 } OutputStream;
 
 
 // 打印 AVPacket 的日志信息，包括时间戳和流索引等。
-static void log_packet(const AVFormatContext *fmt_ctx, const AVPacket *pkt)
-{   
+static void log_packet(const AVFormatContext *fmt_ctx, const AVPacket *pkt)   
+{                             //format(格式)
     // 获取当前数据包对应的流的时间基准
     AVRational *time_base = &fmt_ctx->streams[pkt->stream_index]->time_base;
-
+      //rational(合理的)
     // 打印时间戳和时间
     printf("pts:%s pts_time:%s dts:%s dts_time:%s duration:%s duration_time:%s stream_index:%d\n",
-           av_ts2str(pkt->pts), av_ts2timestr(pkt->pts, time_base),
+        //print(输出)，format(格式化)，presentation(显示)，stamp(戳)，duration(持续时间)，                
+        av_ts2str(pkt->pts), av_ts2timestr(pkt->pts, time_base),
            av_ts2str(pkt->dts), av_ts2timestr(pkt->dts, time_base),
            av_ts2str(pkt->duration), av_ts2timestr(pkt->duration, time_base),
            pkt->stream_index);
 }
 
 // 将帧写入编码器并将压缩后的数据包写入媒体文件。
-static int write_frame(AVFormatContext *fmt_ctx, AVCodecContext *c,
+static int write_frame(AVFormatContext* fmt_ctx, AVCodecContext* c,   //static(静态)
                        AVStream *st, AVFrame *frame, AVPacket *pkt)
 {
     int ret;
@@ -69,8 +72,8 @@ static int write_frame(AVFormatContext *fmt_ctx, AVCodecContext *c,
     // 将帧发送给编码器
     ret = avcodec_send_frame(c, frame);
     if (ret < 0) {
-        fprintf(stderr, "Error sending a frame to the encoder: %s\n",
-                av_err2str(ret));
+		fprintf(stderr, "Error sending a frame to the encoder: %s\n",    //file(文件)，print(打印)，format(格式化)
+			av_err2str(ret));                                        //standard error(标准错误)
         exit(1);
     }
 
@@ -118,9 +121,9 @@ static void add_stream(OutputStream *ost, AVFormatContext *oc,
     }
 
     // 分配 AVPacket 用于临时存储数据包
-    ost->tmp_pkt = av_packet_alloc();
-    if (!ost->tmp_pkt) {
-        fprintf(stderr, "Could not allocate AVPacket\n");
+	ost->tmp_pkt = av_packet_alloc();  //allocate(分配),oscillate(振荡),packet(数据包),temporary(临时)
+    if (!ost->tmp_pkt) {               
+        fprintf(stderr, "Could not allocate AVPacket\n");    
         exit(1);
     }
 
